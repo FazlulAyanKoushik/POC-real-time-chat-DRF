@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from .models import FriendRequest, Friendship
+from .models import FriendRequest, Friendship, Thread, Message
 
 User = get_user_model()
 
@@ -34,3 +34,23 @@ class FriendRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = FriendRequest
         fields = ["id", "from_user", "to_user", "accepted", "created_at"]
+
+
+
+class ThreadSerializer(serializers.ModelSerializer):
+    participants = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Thread
+        fields = ["id", "user1", "user2", "participants", "created_at"]
+
+    def get_participants(self, obj):
+        return [{"id": u.id, "username": u.username} for u in obj.participants()]
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    sender = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Message
+        fields = ["id", "thread", "sender", "content", "timestamp"]

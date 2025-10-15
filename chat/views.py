@@ -1,12 +1,14 @@
 # Create your views here.
 from django.contrib.auth import get_user_model
 from rest_framework import generics
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import FriendRequest, Friendship
-from .serializers import RegisterSerializer, UserSerializer, FriendRequestSerializer
+from .models import FriendRequest, Friendship, Thread, Message
+from .serializers import RegisterSerializer, UserSerializer, FriendRequestSerializer, ThreadSerializer, \
+    MessageSerializer
 
 User = get_user_model()
 
@@ -84,3 +86,76 @@ class ListFriendRequestsView(generics.ListAPIView):
 
     def get_queryset(self):
         return FriendRequest.objects.filter(to_user=self.request.user, accepted=False)
+
+
+# --- Threads ---
+class ThreadListCreateView(generics.ListCreateAPIView):
+    serializer_class = ThreadSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Thread.objects.filter(user1=self.request.user) | Thread.objects.filter(user2=self.request.user)
+
+    def perform_create(self, serializer):
+        user2_id = self.request.data.get("user2_id")
+        if not user2_id:
+            raise PermissionDenied("user2_id is required")
+
+        if int(user2_id) == self.request.user.id:
+            raise PermissionDenied("Cannot create thread with yourself")
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            user2 = User.objects.get(id=user2_id)
+        except User.DoesNotExist:
+            raise PermissionDenied("User not found")
+
+        # Ensure thread doesn't already exist
+        existing = Thread.objects.filter(user1=self.request.user, user2=user2) | Thread.objects.filter(user1=user2, user2=self.request.user)
+        if existing.exists():
+            raise PermissionDenied("Thread already exists")
+
+        serializer.save(user1=self.request.user, user2=user2)
+
+
+# --- Messages ---
+class MessageListView(generics.ListAPIView):
+    serializer_class = MessageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        thread_id = self.kwargs["thread_id"]
+        try:
+            thread = Thread.objects.get(id=thread_id)
+        except Thread.DoesNotExist:
+            raise PermissionDenied("Thread not found")
+
+        if not thread.is_participant(self.request.user):
+            raise PermissionDenied("You are not a participant of this thread")
+
+        return thread.messages.all()
+
+
+class MessageCreateView(generics.CreateAPIView):
+    serializer_class = MessageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        thread_id = self.kwargs["thread_id"]
+        try:
+            thread = Thread.objects.get(id=thread_id)
+        except Thread.DoesNotExist:
+            raise PermissionDenied("Thread not found")
+
+        if not thread.is_participant(self.request.user):
+            raise PermissionDenied("You are not a participant of this thread")
+
+        # Enforce 20-message limit for non-friends
+        other_user = thread.get_other_user(self.request.user)
+        if not Friendship.are_friends(self.request.user, other_user):
+            total_messages = Message.count_between_nonfriends(self.request.user, other_user)
+            if total_messages >= 20:
+                raise PermissionDenied("Message limit reached for non-friends")
+
+        serializer.save(thread=thread, sender=self.request.user)
