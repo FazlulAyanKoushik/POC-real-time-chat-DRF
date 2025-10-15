@@ -1,0 +1,22 @@
+services:
+  web:
+    build: .
+    container_name: drf_chat_app
+    command: >
+      sh -c "python manage.py collectstatic --noinput &&
+             uvicorn core.asgi:application --host 0.0.0.0 --port 8000 --reload"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_chat
+    ports:
+      - "6379:6379"
