@@ -97,9 +97,9 @@ class ThreadListCreateView(generics.ListCreateAPIView):
         return Thread.objects.filter(user1=self.request.user) | Thread.objects.filter(user2=self.request.user)
 
     def perform_create(self, serializer):
-        user2_id = self.request.data.get("user2_id")
+        user2_id = self.request.data.get("user2")
         if not user2_id:
-            raise PermissionDenied("user2_id is required")
+            raise PermissionDenied("user2 id is required")
 
         if int(user2_id) == self.request.user.id:
             raise PermissionDenied("Cannot create thread with yourself")
