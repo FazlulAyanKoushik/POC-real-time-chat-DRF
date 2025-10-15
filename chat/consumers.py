@@ -51,7 +51,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if saved_message is None:
             await self.send(text_data=json.dumps({
                 "type": "limit_reached",
-                "message": "You’ve reached the 20-message limit. Add this user as a friend to continue chatting."
+                "message": "You have reached the 20-message limit. Add this user as a friend to continue chatting."
             }))
             return
 
